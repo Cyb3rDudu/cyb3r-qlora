@@ -54,7 +54,7 @@ This repository is focused on documenting:
 - the small test-run plan
 - helper scripts for subset prep and inspection
 - representative dataset samples only
-- a generated local subset under `/home/dudu/Documents/cyb3r-dataset`, which stays outside git
+- a generated local subset under `/home/dudu/datasets/cyb3r-dataset`, which stays outside git
 
 No full dataset is stored here.
 
@@ -62,7 +62,7 @@ No full dataset is stored here.
 
 When built locally on `carrier`, the current subset produces:
 
-- `28,567` train rows
-- `1,433` eval rows
+- `28,522` train rows
+- `1,478` eval rows
 - `25,000` reasoning-first rows
 - `5,000` agent-policy rows

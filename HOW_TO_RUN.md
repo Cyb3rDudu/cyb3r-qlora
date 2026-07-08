@@ -4,7 +4,7 @@ These instructions assume the repo lives at:
 
 - `/home/dudu/Code/cyb3r-qlora`
 
-and the source corpus lives at:
+and the local training dataset workspace lives at:
 
 - `/home/dudu/datasets/cyb3r-dataset`
 
@@ -70,10 +70,10 @@ Expected outputs:
 - `/home/dudu/datasets/cyb3r-dataset/eval.jsonl`
 - `/home/dudu/datasets/cyb3r-dataset/manifest.json`
 
-Current expected counts from the present source corpus:
+Current expected counts from the present local build:
 
-- `28,567` train rows
-- `1,433` eval rows
+- `28,522` train rows
+- `1,478` eval rows
 
 ## 4. Enter a Python 3.11 shell
 

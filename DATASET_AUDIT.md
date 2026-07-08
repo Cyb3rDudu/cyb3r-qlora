@@ -4,8 +4,8 @@
 
 The current local subset produces:
 
-- `28,567` train rows
-- `1,433` eval rows
+- `28,522` train rows
+- `1,478` eval rows
 - `25,000` reasoning-first rows
 - `5,000` agent-policy rows
 
