@@ -46,7 +46,7 @@ The run is intended to test whether the model improves at:
 - Runtime Q8 weights are for inference only, not training
 - Context: `4096`
 - Steps: `500`
-- Effective batch target: `16`
+- Effective batch: `8` (per-device 1 × gradient-accumulation 8, single process)
 - LoRA rank: `64`
 - LoRA alpha: `128`
 - Learning rate: `1e-4`

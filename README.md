@@ -43,18 +43,47 @@ cyb3r-qlora/
 ├── DATASET_AUDIT.md
 ├── HOW_TO_RUN.md
 ├── scripts/
+│   ├── setup_train_env.sh        # build .venv (uv) + patch triton for NixOS
+│   ├── patch_triton_nixos.py     # idempotent triton wheel patches
+│   ├── run_train.sh              # launch single-process model-parallel run
+│   ├── train_unsloth.py          # unsloth QLoRA + SFTTrainer entrypoint
+│   ├── build_reasoning_dataset.py
+│   ├── select_subset.py
+│   ├── eval_prompts.md
+│   └── unsloth_config_example.md
 └── samples/
 ```
 
+`outputs/`, `.venv/`, and the local dataset are gitignored (see `.gitignore`).
+
+## How to run
+
+Full instructions live in [HOW_TO_RUN.md](HOW_TO_RUN.md). The short version
+on `carrier`:
+
+```bash
+bash scripts/setup_train_env.sh   # one-time: build venv + patch triton
+bash scripts/run_train.sh          # train
+RESUME=1 bash scripts/run_train.sh # resume from latest checkpoint
+```
+
+The run shards the 27B 4-bit model across both 3090s (32+32 layers by default)
+and trains single-process; there is no `accelerate launch` / DDP step.
+
 ## Current status
 
-This repository is focused on documenting:
+The training pipeline runs end-to-end on `carrier`. The committed scripts
+build the NixOS-compatible venv, patch Triton, and launch a single-process
+model-parallel QLoRA run on the two 3090s.
+
+This repository documents:
 
 - the target fine-tuning shape
 - the small test-run plan
-- helper scripts for subset prep and inspection
+- helper scripts for subset prep, inspection, and NixOS-compatible training
 - representative dataset samples only
-- a generated local subset under `/home/dudu/datasets/cyb3r-dataset`, which stays outside git
+- a generated local subset under `/home/dudu/datasets/cyb3r-dataset`, which
+  stays outside git
 
 No full dataset is stored here.
 
