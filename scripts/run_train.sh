@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-27B-Instruct}"
-DATA_DIR="${DATA_DIR:-/home/dudu/Documents/cyb3r-dataset}"
+DATA_DIR="${DATA_DIR:-/home/dudu/datasets/cyb3r-dataset}"
 OUT_DIR="${OUT_DIR:-outputs/cyb3r-reasoning-test}"
 
 accelerate launch --num_processes 2 scripts/train_unsloth.py \

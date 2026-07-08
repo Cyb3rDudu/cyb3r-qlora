@@ -6,7 +6,7 @@ These instructions assume the repo lives at:
 
 and the source corpus lives at:
 
-- `/home/dudu/Documents/cyb3r-dataset`
+- `/home/dudu/datasets/cyb3r-dataset`
 
 ## 1. Prepare the repo
 
@@ -22,13 +22,13 @@ cd cyb3r-qlora
 Create a local dataset directory outside git:
 
 ```bash
-mkdir -p /home/dudu/Documents/cyb3r-dataset
+mkdir -p /home/dudu/datasets/cyb3r-dataset
 ```
 
 Place a local selection manifest at:
 
 ```bash
-/home/dudu/Documents/cyb3r-dataset/source_selection.json
+/home/dudu/datasets/cyb3r-dataset/source_selection.json
 ```
 
 The manifest should define abstract trace buckets and local file paths. Example shape:
@@ -56,19 +56,19 @@ The manifest should define abstract trace buckets and local file paths. Example 
 
 ## 3. Build the local training subset
 
-This writes the generated subset into `/home/dudu/Documents/cyb3r-dataset`.
+This writes the generated subset into `/home/dudu/datasets/cyb3r-dataset`.
 
 ```bash
 python3 scripts/build_reasoning_dataset.py \
-  --selection-manifest /home/dudu/Documents/cyb3r-dataset/source_selection.json \
-  --output-dir /home/dudu/Documents/cyb3r-dataset
+  --selection-manifest /home/dudu/datasets/cyb3r-dataset/source_selection.json \
+  --output-dir /home/dudu/datasets/cyb3r-dataset
 ```
 
 Expected outputs:
 
-- `/home/dudu/Documents/cyb3r-dataset/train.jsonl`
-- `/home/dudu/Documents/cyb3r-dataset/eval.jsonl`
-- `/home/dudu/Documents/cyb3r-dataset/manifest.json`
+- `/home/dudu/datasets/cyb3r-dataset/train.jsonl`
+- `/home/dudu/datasets/cyb3r-dataset/eval.jsonl`
+- `/home/dudu/datasets/cyb3r-dataset/manifest.json`
 
 Current expected counts from the present source corpus:
 
@@ -115,8 +115,8 @@ Example:
 ```bash
 accelerate launch --num_processes 2 scripts/train_unsloth.py \
   --model-name Qwen/Qwen3-27B-Instruct \
-  --train-file /home/dudu/Documents/cyb3r-dataset/train.jsonl \
-  --eval-file /home/dudu/Documents/cyb3r-dataset/eval.jsonl \
+  --train-file /home/dudu/datasets/cyb3r-dataset/train.jsonl \
+  --eval-file /home/dudu/datasets/cyb3r-dataset/eval.jsonl \
   --output-dir outputs/cyb3r-reasoning-test \
   --max-seq-length 4096 \
   --max-steps 500 \
@@ -146,4 +146,4 @@ for manual before/after comparisons.
 
 - Use the original model checkpoint for QLoRA training. The local Q8 weights are kept for inference because that is the practical fit for this hardware at runtime, but they are not the right artifact for adapter training.
 - Keep the adapter separate first; merge later only if needed.
-- The local dataset under `/home/dudu/Documents/cyb3r-dataset` is outside git and stays untracked.
+- The local dataset under `/home/dudu/datasets/cyb3r-dataset` is outside git and stays untracked.
