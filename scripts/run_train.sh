@@ -1,6 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+if [[ -z "${ACCELERATE_BIN:-}" && -x "$PROJECT_ROOT/.venv/bin/accelerate" ]]; then
+  export PATH="$PROJECT_ROOT/.venv/bin:$PATH"
+  ACCELERATE_BIN="$PROJECT_ROOT/.venv/bin/accelerate"
+fi
+ACCELERATE_BIN="${ACCELERATE_BIN:-accelerate}"
+
+if command -v gcc >/dev/null 2>&1; then
+  LIBSTDCXX="$(gcc -print-file-name=libstdc++.so.6)"
+  if [[ -f "$LIBSTDCXX" ]]; then
+    export LD_LIBRARY_PATH="$(dirname "$LIBSTDCXX"):/run/current-system/sw/lib:/run/opengl-driver/lib:${LD_LIBRARY_PATH:-}"
+  fi
+fi
+
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-27B-Instruct}"
 DATA_DIR="${DATA_DIR:-/home/dudu/datasets/cyb3r-dataset}"
 OUT_DIR="${OUT_DIR:-outputs/cyb3r-reasoning-test}"
@@ -23,7 +40,7 @@ if [[ "$RESUME" == "1" ]]; then
   RESUME_ARGS=(--resume-from-checkpoint "$LATEST_CHECKPOINT")
 fi
 
-accelerate launch --num_processes 2 scripts/train_unsloth.py \
+"$ACCELERATE_BIN" launch --num_processes 2 scripts/train_unsloth.py \
   --model-name "$MODEL_NAME" \
   --train-file "$DATA_DIR/train.jsonl" \
   --eval-file "$DATA_DIR/eval.jsonl" \
