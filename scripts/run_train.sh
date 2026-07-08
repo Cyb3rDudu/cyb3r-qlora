@@ -4,6 +4,24 @@ set -euo pipefail
 MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-27B-Instruct}"
 DATA_DIR="${DATA_DIR:-/home/dudu/datasets/cyb3r-dataset}"
 OUT_DIR="${OUT_DIR:-outputs/cyb3r-reasoning-test}"
+RESUME="${RESUME:-0}"
+
+RESUME_ARGS=()
+if [[ "$RESUME" == "1" ]]; then
+  if [[ ! -d "$OUT_DIR" ]]; then
+    echo "resume requested but output directory does not exist: $OUT_DIR" >&2
+    exit 1
+  fi
+
+  LATEST_CHECKPOINT="$(find "$OUT_DIR" -maxdepth 1 -type d -name 'checkpoint-*' | sort -V | tail -n 1)"
+  if [[ -z "${LATEST_CHECKPOINT:-}" ]]; then
+    echo "resume requested but no checkpoint found under: $OUT_DIR" >&2
+    exit 1
+  fi
+
+  echo "resuming from checkpoint: $LATEST_CHECKPOINT"
+  RESUME_ARGS=(--resume-from-checkpoint "$LATEST_CHECKPOINT")
+fi
 
 accelerate launch --num_processes 2 scripts/train_unsloth.py \
   --model-name "$MODEL_NAME" \
@@ -16,4 +34,5 @@ accelerate launch --num_processes 2 scripts/train_unsloth.py \
   --lora-r 64 \
   --lora-alpha 128 \
   --per-device-train-batch-size 1 \
-  --gradient-accumulation-steps 8
+  --gradient-accumulation-steps 8 \
+  "${RESUME_ARGS[@]}"

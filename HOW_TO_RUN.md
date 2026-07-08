@@ -127,6 +127,16 @@ accelerate launch --num_processes 2 scripts/train_unsloth.py \
   --gradient-accumulation-steps 8
 ```
 
+Resume from the latest saved checkpoint:
+
+```bash
+RESUME=1 bash scripts/run_train.sh
+```
+
+Checkpoints are saved every `100` steps under:
+
+- `outputs/cyb3r-reasoning-test/checkpoint-*`
+
 ## 7. What to evaluate
 
 Check whether the tuned model is better at:
@@ -147,3 +157,4 @@ for manual before/after comparisons.
 - Use the original model checkpoint for QLoRA training. The local Q8 weights are kept for inference because that is the practical fit for this hardware at runtime, but they are not the right artifact for adapter training.
 - Keep the adapter separate first; merge later only if needed.
 - The local dataset under `/home/dudu/datasets/cyb3r-dataset` is outside git and stays untracked.
+- If a run is interrupted, resume restarts from the latest saved checkpoint, not the exact last in-memory step.
