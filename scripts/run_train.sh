@@ -18,10 +18,15 @@ if command -v gcc >/dev/null 2>&1; then
   fi
 fi
 
-MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3-27B-Instruct}"
+MODEL_NAME="${MODEL_NAME:-Qwen/Qwen3.6-27B}"
 DATA_DIR="${DATA_DIR:-/home/dudu/datasets/cyb3r-dataset}"
 OUT_DIR="${OUT_DIR:-outputs/cyb3r-reasoning-test}"
 RESUME="${RESUME:-0}"
+
+if [[ "$MODEL_NAME" != "Qwen/Qwen3.6-27B" ]]; then
+  echo "this training repo is pinned to Qwen/Qwen3.6-27B, got: $MODEL_NAME" >&2
+  exit 1
+fi
 
 RESUME_ARGS=()
 if [[ "$RESUME" == "1" ]]; then

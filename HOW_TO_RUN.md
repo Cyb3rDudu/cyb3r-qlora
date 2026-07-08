@@ -114,7 +114,7 @@ Example:
 
 ```bash
 accelerate launch --num_processes 2 scripts/train_unsloth.py \
-  --model-name Qwen/Qwen3-27B-Instruct \
+  --model-name Qwen/Qwen3.6-27B \
   --train-file /home/dudu/datasets/cyb3r-dataset/train.jsonl \
   --eval-file /home/dudu/datasets/cyb3r-dataset/eval.jsonl \
   --output-dir outputs/cyb3r-reasoning-test \
@@ -155,6 +155,7 @@ for manual before/after comparisons.
 ## Notes
 
 - Use the original model checkpoint for QLoRA training. The local Q8 weights are kept for inference because that is the practical fit for this hardware at runtime, but they are not the right artifact for adapter training.
+- This repo is pinned to `Qwen/Qwen3.6-27B`, the official public post-trained 27B dense checkpoint in the Qwen3.6 family.
 - Keep the adapter separate first; merge later only if needed.
 - The local dataset under `/home/dudu/datasets/cyb3r-dataset` is outside git and stays untracked.
 - If a run is interrupted, resume restarts from the latest saved checkpoint, not the exact last in-memory step.

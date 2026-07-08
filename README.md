@@ -1,6 +1,6 @@
 # cyb3r-qlora
 
-Reasoning-focused QLoRA fine-tuning project for a Qwen-class 27B security model named **cyb3r**.
+Reasoning-focused QLoRA fine-tuning project for the `Qwen/Qwen3.6-27B` security model named **cyb3r**.
 
 ## Project scope
 
@@ -16,7 +16,7 @@ The target is not a generic assistant. The target is a security model that reaso
 
 ## Model target
 
-- Base family: Qwen-class 27B
+- Base family: `Qwen/Qwen3.6-27B`
 - Runtime inference variant: Q8 weights
 - Training method: 4-bit QLoRA on the original model checkpoint
 - Hardware: 2× RTX 3090 with NVLink
