@@ -107,8 +107,7 @@ def main() -> None:
     import unsloth  # noqa: F401
     from datasets import load_dataset
     from unsloth import FastLanguageModel
-    from transformers import TrainingArguments
-    from trl import SFTTrainer
+    from trl import SFTConfig, SFTTrainer
 
     device_map = _build_balanced_device_map(args.model_name) if args.balanced_split else args.device_map
 
@@ -155,7 +154,12 @@ def main() -> None:
     train_ds = train_ds.map(render_messages, batched=True, remove_columns=train_ds.column_names)
     eval_ds = eval_ds.map(render_messages, batched=True, remove_columns=eval_ds.column_names)
 
-    training_args = TrainingArguments(
+    # Use SFTConfig (not transformers.TrainingArguments). SFTTrainer expects an
+    # SFTConfig; passing TrainingArguments mostly works but crashes at
+    # checkpoint time with "Can't pickle SFTConfig: it's not the same object"
+    # because the Unsloth-compiled trainer's SFTConfig class identity differs
+    # from the one torch.save re-imports.
+    training_args = SFTConfig(
         output_dir=args.output_dir,
         learning_rate=args.learning_rate,
         per_device_train_batch_size=args.per_device_train_batch_size,
@@ -163,7 +167,10 @@ def main() -> None:
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         eval_strategy="steps",
         eval_steps=50,
+        save_strategy="steps",
         save_steps=100,
+        save_total_limit=3,
+        save_only_model=True,
         logging_steps=10,
         max_steps=args.max_steps,
         bf16=True,
@@ -171,8 +178,13 @@ def main() -> None:
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
         weight_decay=0.01,
+        max_grad_norm=1.0,
         optim="adamw_8bit",
         report_to="none",
+        dataset_text_field="text",
+        max_length=args.max_seq_length,
+        packing=False,
+        logging_nan_inf_filter=True,
     )
 
     trainer = SFTTrainer(
@@ -181,9 +193,6 @@ def main() -> None:
         train_dataset=train_ds,
         eval_dataset=eval_ds,
         args=training_args,
-        dataset_text_field="text",
-        max_seq_length=args.max_seq_length,
-        packing=False,
     )
 
     trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
