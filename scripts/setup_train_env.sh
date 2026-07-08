@@ -23,6 +23,21 @@ uv pip install --python .venv/bin/python \
 # Unsloth imports and trains without torchao on this cu121/torch251 stack.
 uv pip uninstall --python .venv/bin/python torchao || true
 
+# --- NixOS patches ----------------------------------------------------------
+# Triton's bundled ptxas cannot run on NixOS (generic-Linux ELF), its
+# ptx_get_version() emits PTX 8.9 that the system CUDA 12.x ptxas rejects,
+# and its libcuda discovery hardcodes /sbin/ldconfig. Patch all three so the
+# installed wheel survives a venv rebuild. Re-runnable / idempotent.
+#
+# The patch script imports triton, which needs libz/libstdc++ on the linker
+# path at import time (same reason run_train.sh sets LD_LIBRARY_PATH).
+if command -v gcc >/dev/null 2>&1; then
+  LIBSTDCXX_DIR="$(dirname "$(gcc -print-file-name=libstdc++.so.6)")"
+fi
+LIBSTDCXX_DIR="${LIBSTDCXX_DIR:-/run/current-system/sw/lib}"
+export LD_LIBRARY_PATH="${LIBSTDCXX_DIR}:/run/current-system/sw/lib:/run/opengl-driver/lib:${LD_LIBRARY_PATH:-}"
+.venv/bin/python scripts/patch_triton_nixos.py
+
 cat <<MSG
 Training venv is ready.
 Run:

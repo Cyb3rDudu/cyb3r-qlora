@@ -4,6 +4,69 @@ from __future__ import annotations
 import argparse
 
 
+def _build_balanced_device_map(model_name: str = "Qwen/Qwen3.6-27B"):
+    """Split the language layers evenly across all visible CUDA GPUs.
+
+    device_map='auto' packs the first GPU to its memory cap and overflows the
+    rest, which leaves one card idle and the other pinned at 100%/hot. An
+    explicit per-layer split balances compute (and therefore thermals) evenly.
+    The big non-layer modules (embed_tokens, lm_head) go on opposite cards.
+    """
+    import torch
+    from transformers import AutoConfig
+
+    n_gpus = torch.cuda.device_count()
+    if n_gpus < 2:
+        return "auto"
+
+    # Read layer count from the model config without loading weights.
+    # Qwen3.5-family wraps the LLM under text_config.
+    cfg = AutoConfig.from_pretrained(model_name)
+    text_cfg = getattr(cfg, "text_config", cfg)
+    n_layers = (
+        getattr(text_cfg, "num_hidden_layers", None)
+        or getattr(text_cfg, "num_layers", None)
+        or 64
+    )
+
+    # layer i -> gpu (i * n_gpus) // n_layers, i.e. contiguous blocks per GPU
+    blocks = {g: [] for g in range(n_gpus)}
+    for i in range(n_layers):
+        g = (i * n_gpus) // n_layers
+        blocks[g].append(i)
+
+    # language model prefix differs across architectures; cover the common ones
+    layer_prefixes = (
+        "language_model.layers",
+        "model.language_model.layers",
+        "model.layers",
+        "layers",
+    )
+    device_map = {}
+    for g, idxs in blocks.items():
+        for i in idxs:
+            for prefix in layer_prefixes:
+                device_map[f"{prefix}.{i}"] = g
+
+    # Non-layer heavy modules: spread across GPUs. embed on GPU0, lm_head on
+    # the last GPU; norm/rotary live with the last layer block.
+    last = n_gpus - 1
+    for embed in ("model.language_model.embed_tokens", "language_model.embed_tokens", "model.embed_tokens", "embed_tokens"):
+        device_map[embed] = 0
+    for lm in ("lm_head", "model.lm_head"):
+        device_map[lm] = last
+    for norm in ("model.language_model.norm", "language_model.norm", "model.norm", "norm"):
+        device_map[norm] = last
+    for rotary in ("model.language_model.rotary_emb", "language_model.rotary_emb", "model.rotary_emb", "rotary_emb"):
+        device_map[rotary] = last
+    for visual in ("model.visual", "visual"):
+        device_map[visual] = 0
+
+    print(f"[balanced-split] {n_layers} layers across {n_gpus} GPUs: "
+          f"{', '.join(f'GPU{g}={len(idxs)}' for g, idxs in blocks.items())}", flush=True)
+    return device_map
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-name", required=True)
@@ -18,6 +81,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--per-device-train-batch-size", type=int, default=1)
     parser.add_argument("--per-device-eval-batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=8)
+    parser.add_argument(
+        "--device-map",
+        default="auto",
+        help="transformers device_map. Use 'auto' to shard the model across all "
+        "visible GPUs (model-parallel), which is what 2x24GB cards need for a 27B "
+        "4-bit model. Pass 'cuda:0' for a single GPU.",
+    )
+    parser.add_argument(
+        "--balanced-split",
+        action="store_true",
+        help="Build an explicit device_map that splits the language layers evenly "
+        "across all visible GPUs (32+32 for a 64-layer model). This balances "
+        "both memory AND compute/thermals, unlike device_map='auto' which packs "
+        "the first GPU and overflows to the rest (leaving one card idle/hot). "
+        "Overrides --device-map when set.",
+    )
     parser.add_argument("--resume-from-checkpoint", default=None)
     return parser.parse_args()
 
@@ -25,15 +104,19 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    import unsloth  # noqa: F401
     from datasets import load_dataset
+    from unsloth import FastLanguageModel
     from transformers import TrainingArguments
     from trl import SFTTrainer
-    from unsloth import FastLanguageModel
+
+    device_map = _build_balanced_device_map(args.model_name) if args.balanced_split else args.device_map
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=args.model_name,
         max_seq_length=args.max_seq_length,
         load_in_4bit=True,
+        device_map=device_map,
     )
 
     model = FastLanguageModel.get_peft_model(
