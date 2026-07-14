@@ -74,7 +74,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-file", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--max-seq-length", type=int, default=4096)
-    parser.add_argument("--max-steps", type=int, default=500)
+    parser.add_argument("--max-steps", type=int, default=3565)
+    parser.add_argument("--eval-steps", type=int, default=1000)
+    parser.add_argument("--save-steps", type=int, default=1000)
+    parser.add_argument("--packing", action="store_true",
+                        help="Pack short sequences into 4096-token blocks via "
+                             "best-fit-decreasing. Eliminates padding waste "
+                             "(~1.5x faster for variable-length datasets). "
+                             "No accuracy degradation per Unsloth benchmarks.")
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--lora-r", type=int, default=64)
     parser.add_argument("--lora-alpha", type=int, default=128)
@@ -98,6 +105,14 @@ def parse_args() -> argparse.Namespace:
         "Overrides --device-map when set.",
     )
     parser.add_argument("--resume-from-checkpoint", default=None)
+    parser.add_argument(
+        "--load-adapter",
+        default=None,
+        help="Path to a saved LoRA adapter directory (e.g. from a previous epoch). "
+        "If set, the base model is loaded and this adapter is applied on top, "
+        "so training continues from the adapter's weights instead of fresh LoRA. "
+        "Used for multi-epoch training where each epoch is a fresh run.",
+    )
     return parser.parse_args()
 
 
@@ -111,31 +126,45 @@ def main() -> None:
 
     device_map = _build_balanced_device_map(args.model_name) if args.balanced_split else args.device_map
 
+    # For multi-epoch continuation, Unsloth supports pointing model_name directly
+    # at a directory containing adapter_config.json — it loads the base model and
+    # applies the saved adapter automatically. We use a separate --load-adapter
+    # flag to make this explicit and keep the base model_name stable.
+    load_name = args.load_adapter if args.load_adapter else args.model_name
+    if args.load_adapter:
+        print(f"[epoch-continue] loading base + adapter from {args.load_adapter}", flush=True)
+
     model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=args.model_name,
+        model_name=load_name,
         max_seq_length=args.max_seq_length,
         load_in_4bit=True,
         device_map=device_map,
     )
 
-    model = FastLanguageModel.get_peft_model(
-        model,
-        r=args.lora_r,
-        lora_alpha=args.lora_alpha,
-        lora_dropout=0.0,
-        target_modules=[
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "gate_proj",
-            "up_proj",
-            "down_proj",
-        ],
-        bias="none",
-        use_gradient_checkpointing="unsloth",
-        random_state=42,
-    )
+    # When loading an existing adapter, get_peft_model would create a NEW fresh
+    # adapter and discard the loaded weights. Skip it — the model is already a
+    # trainable PEFT model from from_pretrained.
+    if not args.load_adapter:
+        model = FastLanguageModel.get_peft_model(
+            model,
+            r=args.lora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=0.0,
+            target_modules=[
+                "q_proj",
+                "k_proj",
+                "v_proj",
+                "o_proj",
+                "gate_proj",
+                "up_proj",
+                "down_proj",
+            ],
+            bias="none",
+            use_gradient_checkpointing="unsloth",
+            random_state=42,
+        )
+    else:
+        print("[epoch-continue] adapter loaded, skipping fresh get_peft_model", flush=True)
 
     def render_messages(batch):
         texts = []
@@ -166,9 +195,9 @@ def main() -> None:
         per_device_eval_batch_size=args.per_device_eval_batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         eval_strategy="steps",
-        eval_steps=50,
+        eval_steps=args.eval_steps,
         save_strategy="steps",
-        save_steps=100,
+        save_steps=args.save_steps,
         save_total_limit=3,
         save_only_model=True,
         logging_steps=10,
@@ -183,7 +212,7 @@ def main() -> None:
         report_to="none",
         dataset_text_field="text",
         max_length=args.max_seq_length,
-        packing=False,
+        packing=args.packing,
         logging_nan_inf_filter=True,
     )
 

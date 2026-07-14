@@ -84,7 +84,9 @@ def collect_rows(entries: list[dict], old_name: str, new_name: str) -> tuple[lis
                 if counts[trace_type] >= quota:
                     break
                 metadata = row.get("metadata") or {}
-                category = metadata.get("category")
+                # Match against either the legacy "category" field (agent_policy)
+                # or the "ctf_class" tag added by filter_ctf_usable.py.
+                category = metadata.get("category") or metadata.get("ctf_class")
                 pillar = metadata.get("pillar")
                 if categories and category not in categories and pillar != "agent_policy":
                     continue
@@ -105,11 +107,19 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     selection = json.loads(manifest_path.read_text(encoding="utf-8"))
-    reasoning_entries = selection.get("reasoning_sets", [])
-    policy_entries = selection.get("policy_sets", [])
+    # Support both the legacy manifest keys (reasoning_sets, policy_sets) and
+    # the new agent/CTF manifest keys (agent_policy_sets, ctf_sets,
+    # pentest_trajectory_sets). All are treated uniformly by collect_rows.
+    all_entries = (
+        selection.get("reasoning_sets", [])
+        + selection.get("policy_sets", [])
+        + selection.get("agent_policy_sets", [])
+        + selection.get("ctf_sets", [])
+        + selection.get("pentest_trajectory_sets", [])
+    )
 
     selected, counts = collect_rows(
-        reasoning_entries + policy_entries,
+        all_entries,
         args.agent_name_from,
         args.agent_name_to,
     )
@@ -136,10 +146,10 @@ def main() -> None:
 
     output_manifest = {
         "name": selection.get("name", "cyb3r_reasoning_test"),
+        "description": selection.get("description", ""),
         "train_rows": len(train_rows),
         "eval_rows": len(eval_rows),
-        "reasoning_trace_mix": {entry["trace_type"]: int(entry["quota"]) for entry in reasoning_entries},
-        "policy_trace_mix": {entry["trace_type"]: int(entry["quota"]) for entry in policy_entries},
+        "trace_mix": {entry["trace_type"]: int(entry["quota"]) for entry in all_entries},
         "counts": dict(counts),
         "selection_manifest": str(manifest_path),
     }
