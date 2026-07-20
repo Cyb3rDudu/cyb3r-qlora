@@ -74,14 +74,23 @@ else
   DEVICE_MAP_ARGS=(--device-map "$DEVICE_MAP")
 fi
 
+PACKING_ARGS=()
+if [[ "${PACKING:-0}" == "1" ]]; then
+  PACKING_ARGS=(--packing)
+  echo ">> packing: ON (best-fit-decreasing)"
+fi
+
 exec "$PY_BIN" scripts/train_unsloth.py \
   --model-name "$MODEL_NAME" \
   --train-file "$DATA_DIR/train.jsonl" \
   --eval-file "$DATA_DIR/eval.jsonl" \
   --output-dir "$OUT_DIR" \
   "${DEVICE_MAP_ARGS[@]}" \
+  "${PACKING_ARGS[@]}" \
   --max-seq-length 4096 \
-  --max-steps 500 \
+  --max-steps "${MAX_STEPS:-3565}" \
+  --eval-steps "${EVAL_STEPS:-1000}" \
+  --save-steps "${SAVE_STEPS:-1000}" \
   --learning-rate 1e-4 \
   --lora-r 64 \
   --lora-alpha 128 \

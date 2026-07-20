@@ -61,12 +61,68 @@ def patch_ptx_version(path: pathlib.Path) -> None:
         "            return min(80 + minor, 88)"
     )
     if target not in src:
+        # Triton >= 3.2 changed ptx_get_version to already compute 80+minor-1
+        # for minor>=6, which yields PTX 8.7 for CUDA 12.8 (<= 8.8 cap), so the
+        # patch is no longer required. Noop rather than fail.
+        print(
+            f"[triton-patch] ptx_get_version block not found in {path}; "
+            "assuming triton >= 3.2 already caps PTX <= 8.8 (no patch needed)"
+        )
+        return
+    path.write_text(src.replace(target, replacement))
+    print(f"[triton-patch] capped ptx_get_version at 8.8: {path}")
+
+
+def _find_triton_build() -> pathlib.Path:
+    import triton  # noqa: F401
+
+    base = pathlib.Path(triton.__file__).resolve().parent
+    p = base / "runtime" / "build.py"
+    if not p.exists():
+        raise SystemExit(f"cannot find triton build.py at {p}")
+    return p
+
+
+def patch_py_include_dir(path: pathlib.Path) -> None:
+    """On NixOS, sysconfig reports the include dir as the system profile path
+    (e.g. /run/current-system/sw/include/python3.13) which is empty because the
+    python3 package output does not profile-link its headers. Triton's build.py
+    then fails compiling driver.c with `fatal error: Python.h: No such file`.
+
+    Fix: derive the include dir from the interpreter's own store prefix
+    (dirname(dirname(sys.executable))/include/pythonX.Y) which always has the
+    real headers, and inject it as a -I for the gcc command.
+    """
+    src = path.read_text()
+    marker = "# triton-patch: nixos python include dir"
+    if marker in src:
+        print(f"[triton-patch] py include dir override already present: {path}")
+        return
+    target = (
+        "    py_include_dir = sysconfig.get_paths(scheme=scheme)[\"include\"]"
+    )
+    replacement = (
+        "    py_include_dir = sysconfig.get_paths(scheme=scheme)[\"include\"]\n"
+        "    # triton-patch: nixos python include dir\n"
+        "    # On NixOS the profile path has no headers; fall back to the\n"
+        "    # interpreter's own prefix (resolving venv symlinks) which always\n"
+        "    # has the real Python.h.\n"
+        "    import sys as _sys\n"
+        "    if not os.path.isfile(os.path.join(py_include_dir, \"Python.h\")):\n"
+        "        _real_prefix = os.path.dirname(os.path.dirname(os.path.realpath(_sys.executable)))\n"
+        "        _alt = os.path.join(\n"
+        "            _real_prefix, \"include\", \"python\" + \".\".join(str(v) for v in _sys.version_info[:2]),\n"
+        "        )\n"
+        "        if os.path.isfile(os.path.join(_alt, \"Python.h\")):\n"
+        "            py_include_dir = _alt"
+    )
+    if target not in src:
         raise SystemExit(
-            f"could not find expected ptx_get_version block in {path}; "
+            f"could not find expected py_include_dir line in {path}; "
             "triton version may have changed, patch manually"
         )
     path.write_text(src.replace(target, replacement))
-    print(f"[triton-patch] capped ptx_get_version at 8.8: {path}")
+    print(f"[triton-patch] added NixOS-safe Python.h include dir: {path}")
 
 
 def patch_libcuda_dirs(path: pathlib.Path) -> None:
@@ -107,8 +163,10 @@ def main() -> int:
 
     compiler = _find_triton_nvidia_compiler()
     driver = _find_triton_nvidia_driver()
+    build = _find_triton_build()
     patch_ptx_version(compiler)
     patch_libcuda_dirs(driver)
+    patch_py_include_dir(build)
     print("[triton-patch] done")
     return 0
 

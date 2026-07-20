@@ -166,22 +166,40 @@ def main() -> None:
     else:
         print("[epoch-continue] adapter loaded, skipping fresh get_peft_model", flush=True)
 
-    def render_messages(batch):
+    # Load JSONL directly instead of load_dataset("json"). The datasets library
+    # uses PyArrow, which infers a single schema across all rows — and breaks
+    # when tool_calls.arguments dicts have heterogeneous keys across rows
+    # (e.g. {command: ...} vs {url: ...} vs {query: ...}).
+    #
+    # We render the chat template to text HERE (before building the Dataset),
+    # then store only the rendered text. This sidesteps PyArrow schema
+    # inference on the nested messages/tool_calls structures entirely, since
+    # the Dataset only ever sees a flat {"text": str} schema.
+    import json as _json
+    from datasets import Dataset
+
+    def _load_and_render(path: str) -> "Dataset":
         texts = []
-        for messages in batch["messages"]:
-            text = tokenizer.apply_chat_template(
-                messages,
-                tokenize=False,
-                add_generation_prompt=False,
-            )
-            texts.append(text)
-        return {"text": texts}
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = _json.loads(line)
+                messages = row.get("messages", [])
+                text = tokenizer.apply_chat_template(
+                    messages,
+                    tokenize=False,
+                    add_generation_prompt=False,
+                )
+                texts.append(text)
+        return Dataset.from_dict({"text": texts})
 
-    train_ds = load_dataset("json", data_files=args.train_file, split="train")
-    eval_ds = load_dataset("json", data_files=args.eval_file, split="train")
+    train_ds = _load_and_render(args.train_file)
+    eval_ds = _load_and_render(args.eval_file)
 
-    train_ds = train_ds.map(render_messages, batched=True, remove_columns=train_ds.column_names)
-    eval_ds = eval_ds.map(render_messages, batched=True, remove_columns=eval_ds.column_names)
+    # train_ds/eval_ds already have the rendered text column from _load_and_render;
+    # the SFTTrainer picks it up via dataset_text_field="text" in SFTConfig.
 
     # Use SFTConfig (not transformers.TrainingArguments). SFTTrainer expects an
     # SFTConfig; passing TrainingArguments mostly works but crashes at
